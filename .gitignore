@@ -1,3 +1,7 @@
+.idea
+.DS_Store
+*.iml
+requests/*.json
 # Logs
 logs
 *.log
