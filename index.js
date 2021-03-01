@@ -2,9 +2,17 @@ const express = require('express');
 const fs = require('fs');
 const axios = require('axios');
 const app = express();
+const service = "";
 const port = 3000;
 const BASE_URL = `http://localhost:${port}`;
-const PROXY_BASEURL = 'http://localhost:8008';
+const PROXY_BASEURL = 'http://localhost:8888';
+
+const args = process.argv.slice(2);
+let writeWiremocks = false;
+if (args.indexOf("-wm") !== -1) {
+    console.log("writing wiremocks")
+    writeWiremocks = true;
+}
 
 function rawBody(req, res, next) {
     req.setEncoding('utf8');
@@ -33,11 +41,27 @@ function formatBody(body) {
     }
 }
 
-function logRequestResponse(req, proxyResponse, err) {
-    const fileName = `${req.method}-${req.originalUrl}`.replace(/\//g, "|");
+function writeWiremocksToFile(mappingFileName, req, proxyResponse) {
+    const bodyFileName = `${mappingFileName}__Body`;
+    fs.writeFileSync(`${__dirname}/requests/${mappingFileName}.json`, JSON.stringify({
+        request: {
+            method: req.method,
+            url: `${service}${req.originalUrl}`
+        },
+        response: {
+            headers: req.headers,
+            status: proxyResponse.status,
+            bodyFileName: `${bodyFileName}.json`
+        }
+    }, null, 2));
+    fs.writeFileSync(`${__dirname}/requests/${bodyFileName}.json`, JSON.stringify(formatBody(proxyResponse.data), null, 2));
+}
+
+function dumpToFile(fileName, req, proxyResponse, err) {
     fs.writeFileSync(`${__dirname}/requests/${fileName}.json`, JSON.stringify({
         request: {
             headers: req.headers,
+            cookies: req.cookies,
             method: req.method,
             path: req.originalUrl,
             body: formatBody(req.rawBody)
@@ -50,7 +74,21 @@ function logRequestResponse(req, proxyResponse, err) {
     }, null, 2));
 }
 
+function logRequestResponse(req, proxyResponse, err) {
+    const mappingFileName = `${req.method}${service}${req.originalUrl}`
+        .replace(/\//g, "_")
+        .replace(/\?/g, "-")
+        .replace("=", "|");
+
+    if (writeWiremocks && !err) {
+        writeWiremocksToFile(mappingFileName, req, proxyResponse);
+    } else {
+        dumpToFile(mappingFileName, req, proxyResponse, err)
+    }
+}
+
 async function proxyRequest(method, req) {
+    console.log("url = " +`${PROXY_BASEURL}${req.originalUrl}`)
     switch (method) {
         case 'get':
             return axios.get(`${PROXY_BASEURL}${req.originalUrl}`, {headers: req.headers});
@@ -70,7 +108,7 @@ const handler = method => async (req, res) => {
         response = await proxyRequest(method, req);
     } catch (err) {
         error = err;
-        response = err.response;
+        response = err.response ? err.response : err.error;
     }
     logRequestResponse(req, response, error);
     Object.keys(response.headers).forEach(name => {
