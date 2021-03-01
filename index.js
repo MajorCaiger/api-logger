@@ -4,7 +4,7 @@ const axios = require('axios');
 const app = express();
 const port = 3000;
 const BASE_URL = `http://localhost:${port}`;
-const PROXY_BASEURL = 'http://localhost:8000';
+const PROXY_BASEURL = 'http://localhost:8080';
 
 function rawBody(req, res, next) {
     req.setEncoding('utf8');
@@ -33,7 +33,7 @@ function formatBody(body) {
     }
 }
 
-function logRequestResponse(req, proxyResponse) {
+function logRequestResponse(req, proxyResponse, err) {
     const fileName = `${req.method}-${req.originalUrl}`.replace(/\//g, "|");
     fs.writeFileSync(`${__dirname}/requests/${fileName}.json`, JSON.stringify({
         request: {
@@ -42,11 +42,11 @@ function logRequestResponse(req, proxyResponse) {
             path: req.originalUrl,
             body: formatBody(req.rawBody)
         },
-        response: {
+        response: proxyResponse ? {
             headers: proxyResponse.headers,
             status: proxyResponse.status,
             body: formatBody(proxyResponse.data)
-        }
+        } : { error: err.message }
     }, null, 2));
 }
 
@@ -65,12 +65,14 @@ async function proxyRequest(method, req) {
 
 const handler = method => async (req, res) => {
     let response;
+    let error;
     try {
         response = await proxyRequest(method, req);
     } catch (err) {
+        error = err;
         response = err.response;
     }
-    logRequestResponse(req, response);
+    logRequestResponse(req, response, err);
     Object.keys(response.headers).forEach(name => {
         res.append(name, response.headers[name]);
     })
