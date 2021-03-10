@@ -4,7 +4,7 @@ const axios = require('axios');
 const app = express();
 const port = 3000;
 const BASE_URL = `http://localhost:${port}`;
-const PROXY_BASEURL = 'http://localhost:8080';
+const PROXY_BASEURL = 'http://localhost:8008';
 
 function rawBody(req, res, next) {
     req.setEncoding('utf8');
@@ -72,7 +72,7 @@ const handler = method => async (req, res) => {
         error = err;
         response = err.response;
     }
-    logRequestResponse(req, response, err);
+    logRequestResponse(req, response, error);
     Object.keys(response.headers).forEach(name => {
         res.append(name, response.headers[name]);
     })
